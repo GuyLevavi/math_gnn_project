@@ -9,12 +9,15 @@ class LocalizingMask(nn.Module):
         self.degree = degree
         self.threshold = threshold
 
-    def forward(self, L, f):
-        gL = torch.pow(L, self.degree) * self.strength
-        # separate the entries of f
-        df = torch.diag(f)
-        # multiply gL with df to get the convolution with each nodes delta function
-        gL_df = torch.matmul(gL, df)
+    def forward(self, L):
+        """
+        make a mask that localizes anisotropic filters. for each node v, find a local isotropic filter using a
+        polynomial filter. Then in each entry, fill 1 if it is above the threshold in absolute value, else 0. The mask
+        should then be multiplied elementwise with the filter we wish to localize before multiplication with the signal.
+        :param L: Laplacian of the graph
+        :return: mask tensor
+        """
+        gL = torch.pow(L, self.degree)
         # take absolute values and threshold to create mask
-        mask = torch.abs(gL_df) > self.threshold
+        mask = torch.abs(gL) > self.threshold
         return mask
