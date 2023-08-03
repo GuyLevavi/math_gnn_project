@@ -29,6 +29,7 @@ class BaseModel(nn.Module):
         self.fc1 = nn.Sequential(
             nn.Linear(self.max_nodes, 1)
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, L, f):
         # decomposition
