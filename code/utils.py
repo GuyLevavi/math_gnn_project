@@ -68,3 +68,36 @@ def edge_gradient(A, x):
     # negate diagonal of ones
     np.fill_diagonal(ones, -1)
     return ((A - I) @ np.diag(x) - (ones * x).T) * np.abs(A - I)
+
+def plot(G, pos, node_signal, title='', edge_signal=None, cmap=plt.cm.coolwarm, with_labels=False):
+    """
+    Plot a graph with node colors and edge colors
+    :param G: nx Graph
+    :param pos: Position of nodes for plotting
+    :param node_signal: signal on nodes
+    :param title: Title for plot
+    :param edge_signal: signal on edges, given as a matrix in the same shape as A
+    :param cmap: Color map
+    :param with_labels: Node labels will be shown if True
+    :return: 
+    """
+    vmin = np.min(node_signal)
+    vmax = np.max(node_signal)
+    vfinal = np.max(np.abs([vmin, vmax]))
+
+    options = {'node_color': node_signal, 'node_size': 150, 'cmap': cmap,
+               'vmin': -vfinal, 'vmax': vfinal}
+
+    if edge_signal is not None:
+        options['edge_color'] = edge_signal
+        options['edge_cmap'] = cmap
+        options['edge_vmin'] = np.min(edge_signal)
+        options['edge_vmax'] = np.max(edge_signal)
+        options['width'] = 8
+
+    nx.draw(G, pos=pos, with_labels=with_labels, **options)
+    plt.title(title)
+    sm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=-vfinal, vmax=vfinal), cmap=cmap)
+    sm.set_array([])
+    plt.colorbar(sm, ax=plt.gca())
+    plt.show()
