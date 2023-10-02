@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 import torch.functional as f
+import matplotlib.pyplot as plt
+import networkx as nx
 
 from collections import Counter
 from scipy.stats import ortho_group, special_ortho_group
@@ -68,6 +70,7 @@ def edge_gradient(A, x):
     # negate diagonal of ones
     np.fill_diagonal(ones, -1)
     return ((A - I) @ np.diag(x) - (ones * x).T) * np.abs(A - I)
+
 
 def plot(G, pos, node_signal, title='', edge_signal=None, cmap=plt.cm.coolwarm, with_labels=False):
     """
