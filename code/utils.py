@@ -54,3 +54,17 @@ def many_obd_from_eigenvalues(eigvals, m, round_precision=3):
     for i in range(m):
         R[i] = orthogonal_block_diagonal_from_eigenvalues(eigvals, round_precision)
     return R
+
+
+def edge_gradient(A, x):
+    """
+    Edge gradient of a function on nodes
+    :param A: Adjacency matrix
+    :param x: function on nodes
+    :return: Gradient of x along edges, edge field in the shape of A
+    """""
+    I = np.eye(A.shape[0])
+    ones = np.ones((A.shape[0], A.shape[0]))
+    # negate diagonal of ones
+    np.fill_diagonal(ones, -1)
+    return ((A - I) @ np.diag(x) - (ones * x).T) * np.abs(A - I)
