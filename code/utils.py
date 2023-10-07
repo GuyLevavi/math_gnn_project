@@ -66,7 +66,7 @@ def edge_gradient(A, x):
     :return: Gradient of x along edges, edge field in the shape of A
     """""
     I = np.eye(A.shape[0])
-    ones = np.ones((A.shape[0], A.shape[0]))
+    ones = np.ones_like(A)
     # negate diagonal of ones
     np.fill_diagonal(ones, -1)
     return ((A - I) @ np.diag(x) - (ones * x).T) * np.abs(A - I)
