@@ -20,6 +20,53 @@ def band_pass(L, a, b):
     return torch.linalg.inv(torch.eye(n) + torch.pow(X, 2))
 
 
+def batch_band_pass(L, a, b):
+    """
+
+    :param L: Tensor (Batch, Nodes, Nodes)
+    :param a: loc
+    :param b: scale
+    :return: Tensor (Batch, Nodes, Nodes)
+    """
+    n = L.size(1)
+    eye = torch.eye(n).unsqueeze(0)
+
+    loc = a * eye
+    scale = b
+    X = (L - loc) / scale
+
+    return torch.inverse(eye + torch.linalg.matrix_power(X, 2))
+
+
+def entropy(t, dim):
+    """
+    compute entropy of tensor along axis. Assumes tensor is a probability
+    distribution along the appropriate dimension.
+    :param t: Tensor
+    :param dim: int
+    :return: Tensor with the dimension along which the entropy was computed reduced
+    """
+    surprise = t * torch.log(t)
+    ent = -1. * surprise.sum(dim=dim)
+    return ent
+
+
+def batched_index_select(input, dim, index):
+    """
+    https://discuss.pytorch.org/t/batched-index-select/9115/8
+    :param input: B x * x ... x *
+    :param dim: 0 < scalar
+    :param index: B x M
+    :return:
+    """
+    views = [input.shape[0]] + [1 if i != dim else -1 for i in range(1, len(input.shape))]
+    expanse = list(input.shape)
+    expanse[0] = -1
+    expanse[dim] = -1
+    index = index.view(views).expand(expanse)
+    return torch.gather(input, dim, index).squeeze(dim)
+
+
 def orthogonal_block_diagonal_from_eigenvalues(eigenvalues, round_precision=3):
     eigenvalues_round = torch.round(eigenvalues, decimals=round_precision)
     cntr = Counter(eigenvalues_round)

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from einops import rearrange
+from einops import rearrange, reduce
 
 
 class RandomEigenframeFilter(nn.Module):
@@ -17,27 +17,29 @@ class RandomEigenframeFilter(nn.Module):
 
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.k_bands = k_bands
+        self.m_samples = m_samples
 
-        self.coefficients = nn.Parameter(torch.randn((1, out_channels, in_channels, k_bands * m_samples)))
+        self.coefficients = nn.Parameter(torch.randn((1, 1, out_channels, in_channels, k_bands * m_samples)))
 
-    def forward(self, D, x):
+    def forward(self, x, D):
         """
 
-        :param D: Tensor (Batch, Nodes, k_bands * m_samples)
-        :param x: Tensor (Batch, Nodes, in_channels)
-        :return: Tensor (Batch, Nodes, out_channels)
+        :param x: Tensor (Batch, Frame, Nodes, in_channels)
+        :param D: Tensor (Batch, Frame, Nodes, k_bands * m_samples)
+        :return: Tensor (Batch, Frame, Nodes, out_channels)
         """
-        m = D.shape[2]
+        # perform multichannel convolution
+        Dt_x = torch.einsum('bfnm, bfni -> bfmi', D, x)  # (b, f, n, m) x (b, f, n, c_in) -> (b, f, m, c_in)
+        Dt_x = rearrange(Dt_x, 'b f m cin -> b f () m cin')  # (b, f, m, c_in) -> (b, f, c_out=1, m, c_in)
+        D = rearrange(D, 'b f n m -> b f () n m')  # (b, f, n, m) -> (b, f, c_out=1, n, m)
+        C = torch.diag_embed(self.coefficients)  # (b=1, f=1, c_out, c_in, m) -> (b=1, f=1, c_out, c_in, m, m)
+        C_Dt_x = torch.einsum('bfoimj, bfoji -> bfoim', C, Dt_x)  # (b=1, f=1, c_out, c_in, m, m) x (b, f, c_out=1, m, c_in) -> (b, f, c_out, c_in, m)
+        D_C_Dt_x = (1 / self.m_samples ** 0.5) * torch.einsum('bfonm, bfoim -> bfoni', D, C_Dt_x)  # (b, f, c_out=1, n, m) x (b, f, c_out, m, c_in) -> (b, f, c_out, n, c_in)
+        y = reduce(D_C_Dt_x, 'b f cout n cin -> b f cout n', 'sum')  # (b, f, c_out, n, c_in) -> (b, f, c_out, n)
+        out = rearrange(y, 'b f cout n -> b f n cout')  # (b, f, c_out, n) -> (b, f, n, c_out)
 
-        Dt = rearrange(D, 'b n m -> b m n')  # (b, n, m) -> (b, m, n)
-        Dt_x = torch.matmul(Dt, x)  # (b, m, n) x (b, n, c_in) -> (b, m, c_in)
-        Dt_x = rearrange(Dt_x, 'b m cin -> b () m cin')  # (b, m, c_in) -> (b, 1, m, c_in)
-        D = rearrange(D, 'b n m -> b () n m')  # (b, n, m) -> (b, 1, n, m)
-        C = torch.diag_embed(self.coefficients)  # (1, c_out, c_in, m) -> (1, c_out, c_in, m, m)
-        C_Dt_x = torch.einsum('boimj, bomi -> boij', C, Dt_x)  # (1, c_out, c_in, m, m) x (b, 1, c_in, m) -> (b, c_out, c_in, m)
-        D_C_Dt_x = (1 / m ** 0.5) * torch.einsum('bonm, boim -> boni', D, C_Dt_x)  # (b, 1, n, m) x (b, c_out, m, c_in) -> (b, c_out, n, c_in)
-        out = torch.sum(D_C_Dt_x, dim=-1)  # (b, c_out, n, c_in) -> (b, c_out, n)
-        return rearrange(out, 'b cout n -> b n cout')  # (b, c_out, n) -> (b, n, c_out)
+        return out
 
 
 if __name__ == '__main__':
