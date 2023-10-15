@@ -30,6 +30,7 @@ def batch_band_pass(L, a, b):
     """
     n = L.size(1)
     eye = torch.eye(n).unsqueeze(0)
+    eye = eye.to(L.device)
 
     loc = a * eye
     scale = b
@@ -47,6 +48,18 @@ def entropy(t, dim):
     :return: Tensor with the dimension along which the entropy was computed reduced
     """
     surprise = t * torch.log(t)
+    ent = -1. * surprise.sum(dim=dim)
+    return ent
+
+
+def entropy_from_logits(t, dim):
+    """
+    compute entropy of tensor of logits along axis.
+    :param t: Tensor
+    :param dim: int
+    :return: Tensor with the dimension along which the entropy was computed reduced
+    """
+    surprise = torch.exp(t) * t
     ent = -1. * surprise.sum(dim=dim)
     return ent
 

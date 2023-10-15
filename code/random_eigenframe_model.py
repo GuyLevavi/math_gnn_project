@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from einops import rearrange, reduce
 from random_eigenframe_filter import RandomEigenframeFilter
 from band_pass import BandPass
-from utils import entropy, batched_index_select
+from utils import entropy_from_logits, batched_index_select
 
 
 class RandomEigenframeModel(nn.Module):
@@ -33,38 +33,44 @@ class RandomEigenframeModel(nn.Module):
 
         self.classifier = nn.Sequential(
             nn.Linear(self.hidden_channels[-1], n_classes),
-            nn.Softmax(dim=2)  # should get (Batch, Frame, Class)
+            nn.LogSoftmax(dim=2)  # should get (Batch, Frame, Class)
         )
 
-    def forward(self, x, L):
+    def forward(self, x, L, return_intermediate=False):
         """
 
         :param x: Tensor (Batch, Nodes, in_channels), input signals
         :param L: Tensor (Batch, Nodes, Nodes), input Laplacians
+        :param return_intermediate: bool. If True return outputs of convolution layers as list
         :return: Tensor (Batch, Classes)
         """
         # sample random frames
         x, D = self.make_filter_input(x, L)
+        intermediate = []
 
         # perform convolution
         for conv_layer in self.conv_layers:
             x = conv_layer(x, D)
             x = F.tanh(x)
+            intermediate.append(x)
 
         # reduce Nodes dimension
         x = reduce(x, 'b f n c -> b f c', 'mean')
 
         # linear
-        x = self.classifier(x)  # (Batch, Frame, Class)
+        logits = self.classifier(x)  # (Batch, Frame, Class)
 
         # entropy
-        ent = entropy(x, dim=2)  # (Batch, Frame)
+        ent = entropy_from_logits(logits, dim=2)  # (Batch, Frame)
 
         # keep the frame with maximal entropy for each example in batch
         idx = torch.argmax(ent, dim=1)  # (Batch, Frame)
-        out = batched_index_select(input=x, dim=1, index=idx)  # (Batch, Class)
+        out = batched_index_select(input=logits, dim=1, index=idx)  # (Batch, Class)
 
-        return out
+        if return_intermediate:
+            return out, intermediate
+        else:
+            return out
 
     def make_filter_input(self, x, L):
         """
@@ -81,6 +87,7 @@ class RandomEigenframeModel(nn.Module):
 
         # sample random vectors
         w = torch.randn(size=(bs, self.l_frames, n, self.k_bands, self.m_samples))
+        w = w.to(L.device)
 
         # apply band pass
         d = self.bp(L, w)  # Tensor (b, f, n, k, m)
