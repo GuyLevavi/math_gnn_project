@@ -47,7 +47,8 @@ def batch_band_pass(L, a, b):
     # reshape to original shape
     ones_bd = torch.block_diag(*list(torch.ones_like(L)))
     idx = torch.nonzero(ones_bd)
-    return bpX[idx[:, 0], idx[:, 1]].reshape(L.shape)
+    out = bpX[idx[:, 0], idx[:, 1]].reshape(L.shape)
+    return out.float()
 
 
 def entropy(t, dim):
