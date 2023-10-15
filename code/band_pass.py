@@ -27,6 +27,7 @@ class BandPass(nn.Module):
         # perform band pass on Laplacians
         bpL = rearrange([bp(L) for bp in self.band_passes],
                         'k b n1 n2 -> b () k n1 n2')
+        bpL = bpL.to(w.device)
 
         # apply to random vectors
         d = torch.einsum('bfknr, bfrkm -> bfknm', bpL, w)

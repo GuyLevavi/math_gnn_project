@@ -64,7 +64,7 @@ class RandomEigenframeModel(nn.Module):
         ent = entropy_from_logits(logits, dim=2)  # (Batch, Frame)
 
         # keep the frame with maximal entropy for each example in batch
-        idx = torch.argmax(ent, dim=1)  # (Batch, Frame)
+        idx = torch.argmin(ent, dim=1)  # (Batch, Frame)
         out = batched_index_select(input=logits, dim=1, index=idx)  # (Batch, Class)
 
         if return_intermediate:
@@ -87,7 +87,7 @@ class RandomEigenframeModel(nn.Module):
 
         # sample random vectors
         w = torch.randn(size=(bs, self.l_frames, n, self.k_bands, self.m_samples))
-        w = w.to(L.device)
+        w = w.to(next(iter(self.parameters())).device)
 
         # apply band pass
         d = self.bp(L, w)  # Tensor (b, f, n, k, m)

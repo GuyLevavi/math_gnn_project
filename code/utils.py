@@ -3,9 +3,11 @@ import torch
 import torch.functional as f
 import matplotlib.pyplot as plt
 import networkx as nx
+import scipy
 
 from collections import Counter
 from scipy.stats import ortho_group, special_ortho_group
+from einops import repeat
 
 
 def band_pass(L, a, b):
@@ -28,15 +30,24 @@ def batch_band_pass(L, a, b):
     :param b: scale
     :return: Tensor (Batch, Nodes, Nodes)
     """
-    n = L.size(1)
-    eye = torch.eye(n).unsqueeze(0)
-    eye = eye.to(L.device)
+    # to sparse
+    L_bd = torch.block_diag(*list(L))
+    L_np = L_bd.numpy()
+    L_csc = scipy.sparse.csc_matrix(L_np)
+
+    # perform band pass
+    bs, n, _ = L.shape
+    eye = scipy.sparse.eye(bs * n)
 
     loc = a * eye
     scale = b
-    X = (L - loc) / scale
+    X = (L_csc - loc) / scale
+    bpX = torch.tensor(scipy.sparse.linalg.inv(eye + X @ X).todense())
 
-    return torch.inverse(eye + torch.linalg.matrix_power(X, 2))
+    # reshape to original shape
+    ones_bd = torch.block_diag(*list(torch.ones_like(L)))
+    idx = torch.nonzero(ones_bd)
+    return bpX[idx[:, 0], idx[:, 1]].reshape(L.shape)
 
 
 def entropy(t, dim):
