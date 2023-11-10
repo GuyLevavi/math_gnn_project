@@ -3,13 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from einops import rearrange, reduce
-from random_eigenframe_filter import RandomEigenframeFilter
+from einops.layers.torch import Reduce
+
 from band_pass import BandPass
+from random_eigenframe_filter import RandomEigenframeFilter
 from utils import entropy_from_logits, batched_index_select
 
 
 class RandomEigenframeModel(nn.Module):
-    def __init__(self, in_channels, hidden_channels, n_classes, k_bands, m_samples, l_frames):
+    def __init__(self, in_channels, hidden_channels, n_classes, k_bands, m_samples, l_frames): # , mask_degree, mask_threshold):
         super(RandomEigenframeModel, self).__init__()
 
         self.in_channels = in_channels
@@ -21,6 +23,7 @@ class RandomEigenframeModel(nn.Module):
 
         scale = 2 / (k_bands - 1)
         self.bp = BandPass(scale=scale)
+        # self.localizing_mask = LocalizingMask(degree=mask_degree, threshold=mask_threshold)
 
         self.hidden_channels.insert(0, in_channels)
         self.conv_layers = nn.ParameterList(
@@ -32,16 +35,19 @@ class RandomEigenframeModel(nn.Module):
         )
 
         self.classifier = nn.Sequential(
+            nn.Linear(self.hidden_channels[-1], self.hidden_channels[-1]),
+            Reduce('b f n c -> b f c', 'mean'),
             nn.Linear(self.hidden_channels[-1], n_classes),
             nn.LogSoftmax(dim=2)  # should get (Batch, Frame, Class)
         )
 
-    def forward(self, x, L, return_intermediate=False):
+    def forward(self, x, L, return_intermediate=False, return_idx=False):
         """
 
         :param x: Tensor (Batch, Nodes, in_channels), input signals
         :param L: Tensor (Batch, Nodes, Nodes), input Laplacians
         :param return_intermediate: bool. If True return outputs of convolution layers as list
+        :param return_idx: bool. If True return idx of best frame.
         :return: Tensor (Batch, Classes)
         """
         # sample random frames
@@ -54,10 +60,7 @@ class RandomEigenframeModel(nn.Module):
             x = F.tanh(x)
             intermediate.append(x)
 
-        # reduce Nodes dimension
-        x = reduce(x, 'b f n c -> b f c', 'mean')
-
-        # linear
+        # apply fully connected then reduce Nodes dimension then apply fully connected again
         logits = self.classifier(x)  # (Batch, Frame, Class)
 
         # entropy
@@ -67,10 +70,15 @@ class RandomEigenframeModel(nn.Module):
         idx = torch.argmin(ent, dim=1)  # (Batch, Frame)
         out = batched_index_select(input=logits, dim=1, index=idx)  # (Batch, Class)
 
-        if return_intermediate:
-            return out, intermediate
-        else:
+        if not return_intermediate and not return_idx:
             return out
+        else:
+            res = {'out': out}
+            if return_intermediate:
+                res['intermediate'] = intermediate
+            if return_idx:
+                res['idx'] = idx
+            return res
 
     def make_filter_input(self, x, L):
         """
@@ -98,7 +106,13 @@ class RandomEigenframeModel(nn.Module):
         # normalize along Nodes dimension
         D = F.normalize(d, dim=2)
 
-        return x, D
+        # localizing mask
+        #M = self.localizing_mask(L)
+
+        return x, D#, M
+
+    def regularization_term(self):
+        return torch.cat([conv_layer.regularization_term().unsqueeze(0) for conv_layer in self.conv_layers]).mean()
 
 
 if __name__ == '__main__':

@@ -14,10 +14,10 @@ class LocalizingMask(nn.Module):
         make a mask that localizes anisotropic filters. for each node v, find a local isotropic filter using a
         polynomial filter. Then in each entry, fill 1 if it is above the threshold in absolute value, else 0. The mask
         should then be multiplied elementwise with the filter we wish to localize before multiplication with the signal.
-        :param L: Laplacian of the graph
+        :param L: (Batch, Node, Node)
         :return: mask tensor
         """
-        gL = torch.pow(L, self.degree)
+        gL = torch.linalg.matrix_power(L, self.degree)
         # take absolute values and threshold to create mask
         mask = torch.abs(gL) > self.threshold
         return mask

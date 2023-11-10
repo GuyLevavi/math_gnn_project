@@ -30,25 +30,11 @@ def batch_band_pass(L, a, b):
     :param b: scale
     :return: Tensor (Batch, Nodes, Nodes)
     """
-    # to sparse
-    L_bd = torch.block_diag(*list(L))
-    L_np = L_bd.numpy()
-    L_csc = scipy.sparse.csc_matrix(L_np)
-
-    # perform band pass
-    bs, n, _ = L.shape
-    eye = scipy.sparse.eye(bs * n)
-
+    eye = torch.eye(L.shape[1]).to(L.device)
     loc = a * eye
     scale = b
-    X = (L_csc - loc) / scale
-    bpX = torch.tensor(scipy.sparse.linalg.inv(eye + X @ X).todense())
-
-    # reshape to original shape
-    ones_bd = torch.block_diag(*list(torch.ones_like(L)))
-    idx = torch.nonzero(ones_bd)
-    out = bpX[idx[:, 0], idx[:, 1]].reshape(L.shape)
-    return out.float()
+    X = (L - loc) / scale
+    return torch.inverse(eye + torch.pow(X, 2))
 
 
 def entropy(t, dim):
