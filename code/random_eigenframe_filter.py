@@ -21,6 +21,7 @@ class RandomEigenframeFilter(nn.Module):
         self.m_samples = m_samples
 
         self.coefficients = nn.Parameter(torch.randn((1, 1, out_channels, in_channels, k_bands * m_samples)))
+        self.bias = nn.Parameter(torch.randn((1, 1, 1, out_channels)))  # (b, f, n, cout)
 
     def forward(self, x, D): #, M):
         """
@@ -40,6 +41,7 @@ class RandomEigenframeFilter(nn.Module):
         D_C_Dt_x = (1 / self.m_samples ** 0.5) * torch.einsum('bfonm, bfoim -> bfoni', D, C_Dt_x)  # (b, f, c_out=1, n, m) x (b, f, c_out, m, c_in) -> (b, f, c_out, n, c_in)
         y = reduce(D_C_Dt_x, 'b f cout n cin -> b f cout n', 'sum')  # (b, f, c_out, n, c_in) -> (b, f, c_out, n)
         out = rearrange(y, 'b f cout n -> b f n cout')  # (b, f, c_out, n) -> (b, f, n, c_out)
+        out_b = out + self.bias
 
         # With mask implementation
         # C = torch.diag_embed(self.coefficients)  # (b=1, f=1, c_out, c_in, m) -> (b=1, f=1, c_out, c_in, m, m)
@@ -52,7 +54,7 @@ class RandomEigenframeFilter(nn.Module):
         # y = (1 / self.m_samples ** 0.5) * reduce(M_D_C_Dt_x, 'b f cout n cin -> b f cout n', 'mean')  # (b, f, c_out, n, c_in) -> (b, f, c_out, n)
         # out = rearrange(y, 'b f cout n -> b f n cout')  # (b, f, c_out, n) -> (b, f, n, c_out)
 
-        return out
+        return out_b
 
     def regularization_term(self):
         diff_norm = torch.linalg.norm(self.coefficients.diff(dim=-1), dim=-1)

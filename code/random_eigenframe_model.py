@@ -12,7 +12,7 @@ from utils import entropy_from_logits, batched_index_select
 
 class RandomEigenframeModel(nn.Module):
     def __init__(self, in_channels, hidden_channels, n_classes, k_bands, m_samples,
-                 l_frames, dropout=0.5):  # , mask_degree, mask_threshold):
+                 l_frames):  # , mask_degree, mask_threshold):
         super(RandomEigenframeModel, self).__init__()
 
         self.in_channels = in_channels
@@ -21,7 +21,6 @@ class RandomEigenframeModel(nn.Module):
         self.k_bands = k_bands
         self.m_samples = m_samples
         self.l_frames = l_frames
-        self.dropout = dropout
 
         scale = 2 / (k_bands - 1)
         self.bp = BandPass(scale=scale)
@@ -60,7 +59,7 @@ class RandomEigenframeModel(nn.Module):
         # perform convolution
         for conv_layer in self.conv_layers:
             x = conv_layer(x, D)
-            x = F.relu(x)
+            x = F.tanh(x)
             intermediate.append(x)
 
         # apply fully connected then reduce Nodes dimension then apply fully connected again
@@ -69,11 +68,8 @@ class RandomEigenframeModel(nn.Module):
         # entropy
         ent = entropy_from_logits(logits, dim=2)  # (Batch, Frame)
 
-        # keep the frame with maximal entropy for each example in batch
+        # keep the frame with minimal entropy for each example in batch
         idx = torch.argmin(ent, dim=1)  # (Batch, Frame)
-        if self.training:
-          idx = torch.where(torch.rand_like(idx, dtype=torch.float) < self.dropout, torch.randint_like(idx, self.l_frames), idx)
-
         out = batched_index_select(input=logits, dim=1, index=idx)  # (Batch, Class)
 
         if not return_intermediate and not return_idx:
